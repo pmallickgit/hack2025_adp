@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mitigation Strategy - Azure OpenAI Security Agent</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px 0;
+            background-color: #f5f7fa;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        .header-card {
+            background-color: #1a3263;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .content-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .btn-back {
+            background-color: #2c4b8e;
+            border-color: #2c4b8e;
+            color: white;
+        }
+        .btn-back:hover {
+            background-color: #1a3263;
+            border-color: #1a3263;
+            color: white;
+        }
+        /* Style the rendered markdown content */
+        #markdown-content {
+            line-height: 1.6;
+            color: #333;
+            font-size: 16px;
+        }
+        #markdown-content h1, 
+        #markdown-content h2, 
+        #markdown-content h3, 
+        #markdown-content h4, 
+        #markdown-content h5, 
+        #markdown-content h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #2c4b8e;
+        }
+        #markdown-content h1 {
+            font-size: 2em;
+            padding-bottom: .3em;
+            border-bottom: 2px solid #eaecef;
+        }
+        #markdown-content h2 {
+            font-size: 1.5em;
+            padding-bottom: .3em;
+            border-bottom: 1px solid #eaecef;
+            color: #1a3263;
+        }
+        #markdown-content h3 {
+            font-weight: 600;
+            color: #2c4b8e;
+            margin-bottom: 16px;
+            border-left: 4px solid #2c4b8e;
+            padding-left: 10px;
+        }
+        #markdown-content p, 
+        #markdown-content blockquote, 
+        #markdown-content ul, 
+        #markdown-content ol, 
+        #markdown-content dl, 
+        #markdown-content table, 
+        #markdown-content pre {
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+        #markdown-content strong {
+            font-weight: 600;
+            color: #1a3263;
+        }
+        #markdown-content code {
+            padding: .2em .4em;
+            margin: 0;
+            font-size: 85%;
+            background-color: rgba(27,31,35,.05);
+            border-radius: 3px;
+            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+        }
+        #markdown-content pre {
+            padding: 16px;
+            overflow: auto;
+            font-size: 85%;
+            line-height: 1.45;
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            border: 1px solid #e1e4e8;
+            margin-bottom: 20px;
+        }
+        #markdown-content pre code {
+            padding: 0;
+            background-color: transparent;
+        }
+        #markdown-content ul,
+        #markdown-content ol {
+            padding-left: 2em;
+        }
+        #markdown-content ul li,
+        #markdown-content ol li {
+            margin-bottom: 6px;
+        }
+        /* Enhanced table styling */
+        #markdown-content table {
+            border-spacing: 0;
+            border-collapse: collapse;
+            width: 100%;
+            margin: 25px 0;
+            overflow-x: auto;
+            display: block;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+        }
+        #markdown-content table th {
+            padding: 12px 14px;
+            text-align: left;
+            font-weight: 600;
+            background-color: #2c4b8e;
+            color: white;
+            border: 1px solid #1a3263;
+            font-size: 0.95rem;
+        }
+        #markdown-content table td {
+            padding: 12px 14px;
+            border: 1px solid #dfe2e5;
+            font-size: 0.95rem;
+            vertical-align: top;
+        }
+        #markdown-content table tr {
+            background-color: white;
+            transition: background-color 0.2s ease;
+        }
+        #markdown-content table tr:nth-child(2n) {
+            background-color: #f8f9fa;
+        }
+        #markdown-content table tr:hover {
+            background-color: #f1f5fb;
+        }
+        /* Make tables responsive */
+        @media (max-width: 767px) {
+            #markdown-content table {
+                max-width: 100%;
+                font-size: 0.85rem;
+            }
+            #markdown-content table th, 
+            #markdown-content table td {
+                padding: 8px 10px;
+            }
+        }
+        #markdown-content blockquote {
+            padding: 0 1em;
+            color: #6a737d;
+            border-left: 4px solid #2c4b8e;
+            background-color: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 0 5px 5px 0;
+        }
+        #markdown-content hr {
+            height: 2px;
+            background-color: #e1e4e8;
+            border: none;
+            margin: 24px 0;
+        }
+        /* Special callout boxes */
+        .alert-info, .alert-warning, .alert-danger, .alert-success {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="header-card p-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h1><i class="fas fa-shield-alt me-2"></i> Mitigation Strategy</h1>
+                        <a href="/" class="btn btn-back">
+                            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+                        </a>
+                    </div>
+                    <p class="lead mb-0">AI-generated security recommendations and mitigation plans</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Report Content -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <!-- Display the HTML content with enhanced styling -->
+                    <div id="markdown-content">
+                        {{ content | safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Script to enhance any potential elements in the markdown content -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add special styling to important sections
+            const markdownContent = document.getElementById('markdown-content');
+            
+            // Look for headers and enhance them
+            const headers = markdownContent.querySelectorAll('h2');
+            headers.forEach(header => {
+                if(header.textContent.toLowerCase().includes('critical') || 
+                   header.textContent.toLowerCase().includes('high risk')) {
+                    header.style.color = '#dc3545';
+                }
+            });
+
+            // Add alert-* classes to paragraphs that contain specific keywords
+            const paragraphs = markdownContent.querySelectorAll('p');
+            paragraphs.forEach(p => {
+                const text = p.textContent.toLowerCase();
+                if(text.includes('critical') || text.includes('urgent') || text.includes('severe')) {
+                    p.classList.add('alert-danger');
+                } else if(text.includes('important') || text.includes('warning')) {
+                    p.classList.add('alert-warning');
+                } else if(text.includes('note') || text.includes('tip')) {
+                    p.classList.add('alert-info');
+                }
+                
+                // Add nice checkmarks to recommendation items
+                if(text.includes('recommend')) {
+                    p.innerHTML = '✅ ' + p.innerHTML;
+                }
+            });
+
+            // Fix the Implementation Plan table if it exists and is broken
+            const implementationPlanSection = Array.from(markdownContent.querySelectorAll('h2')).find(
+                h2 => h2.textContent.includes('Implementation Plan')
+            );
+            
+            if (implementationPlanSection) {
+                // Look for broken table text after the Implementation Plan heading
+                let nextElement = implementationPlanSection.nextElementSibling;
+                while (nextElement && nextElement.tagName !== 'H2') {
+                    if (nextElement.textContent.includes('Phase') && 
+                        nextElement.textContent.includes('Control/Action') && 
+                        nextElement.textContent.includes('Responsible Team')) {
+                        
+                        // This is likely our broken table text
+                        const tableText = nextElement.textContent;
+                        
+                        // Create a properly formatted HTML table
+                        const tableHTML = createTableFromText(tableText);
+                        
+                        // Replace the broken text with the new table
+                        const newTable = document.createElement('div');
+                        newTable.innerHTML = tableHTML;
+                        nextElement.parentNode.replaceChild(newTable.firstElementChild, nextElement);
+                        break;
+                    }
+                    nextElement = nextElement.nextElementSibling;
+                }
+            }
+            
+            // Function to parse the broken table text and create a proper HTML table
+            function createTableFromText(text) {
+                // Split the text by pipe character to get cells
+                const rows = [];
+                let currentRow = [];
+                
+                // First normalize the text by removing the weird formatting artifacts
+                const cleanedText = text.replace(/\|\s*\|/g, '|').trim();
+                const lines = cleanedText.split('|');
+                
+                // Define our known column headers
+                const headers = ['Phase', 'Control/Action', 'Description', 'Responsible Team', 'Timeline'];
+                
+                // Create table structure
+                let html = '<table class="table table-striped table-bordered">';
+                
+                // Add header row
+                html += '<thead><tr>';
+                headers.forEach(header => {
+                    html += `<th>${header}</th>`;
+                });
+                html += '</tr></thead>';
+                
+                // Process the content rows based on looking for phase types
+                html += '<tbody>';
+                
+                // Define our known phase types to detect rows
+                const phaseTypes = ['Immediate', 'Short-term', 'Long-term'];
+                
+                // Extract data for rows - we need to parse the text intelligently
+                const elements = cleanedText.split('|').filter(element => element.trim() !== '');
+                let dataRows = [];
+                
+                // Process the first set of rows
+                for (let i = 0; i < elements.length; i += 5) {
+                    if (i + 4 < elements.length) {
+                        let phase = elements[i].trim();
+                        // Only add rows that start with a valid phase
+                        if (phaseTypes.some(validPhase => phase.includes(validPhase))) {
+                            dataRows.push([
+                                phase,
+                                elements[i + 1].trim(),
+                                elements[i + 2].trim(),
+                                elements[i + 3].trim(),
+                                elements[i + 4].trim()
+                            ]);
+                        }
+                    }
+                }
+                
+                // If we couldn't extract rows properly, try parsing as a plan text table
+                if (dataRows.length === 0) {
+                    // Split the text by phase types to get rows
+                    for (const phase of phaseTypes) {
+                        const phaseRegex = new RegExp(`${phase}\\s*\\|\\s*([^|]+)\\|\\s*([^|]+)\\|\\s*([^|]+)\\|\\s*([^|]+)`, 'g');
+                        let match;
+                        while ((match = phaseRegex.exec(cleanedText)) !== null) {
+                            dataRows.push([
+                                phase,
+                                match[1].trim(),
+                                match[2].trim(),
+                                match[3].trim(),
+                                match[4].trim()
+                            ]);
+                        }
+                    }
+                }
+                
+                // Add each row
+                dataRows.forEach(rowData => {
+                    html += '<tr>';
+                    rowData.forEach(cell => {
+                        html += `<td>${cell}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                
+                return html;
+            }
+
+            // Ensure all tables have proper Bootstrap classes
+            const tables = markdownContent.querySelectorAll('table');
+            tables.forEach(table => {
+                table.classList.add('table', 'table-striped', 'table-bordered', 'table-hover');
+            });
+        });
+    </script>
+</body>
+</html>

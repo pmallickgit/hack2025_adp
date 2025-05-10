@@ -1,6 +1,6 @@
 
 ```markdown
-
+```
 ---
 
 # Analysis of ADP Request Handling and Agent Learning
@@ -69,7 +69,7 @@ The ADP service plays a critical role in managing incoming requests based on def
 
 ---
 
-```
+
 # How to Install and use the code
 
 ## Step 1: Checkout a New Branch
@@ -121,8 +121,4 @@ Open your web browser and navigate to:
 - http://127.0.0.1:5000
 - http://<your machine IP>:5000
 ```
-```
-Sure, here's your document converted to Markdown format:
-
-
 ```

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Reports Hub - Azure OpenAI Security Agent</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px 0;
+            background-color: #cfd1d3;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #111a20;
+        }
+        .header-card {
+            background-color: #1d5532;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .content-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+            transition: transform 0.3s ease;
+        }
+        .content-card:hover {
+            transform: translateY(-5px);
+        }
+        .analyze-form {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .btn-back {
+            background-color: #1d5532;
+            border-color: #1d5532;
+            color: white;
+        }
+        .btn-back:hover {
+            background-color: #111a20;
+            border-color: #111a20;
+            color: white;
+        }
+        .report-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .report-card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .report-card-footer {
+            margin-top: auto;
+            padding-top: 15px;
+        }
+        .report-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #1d5532;
+        }
+        .card-disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .btn-primary {
+            background-color: #1d5532;
+            border-color: #1d5532;
+        }
+        .btn-primary:hover {
+            background-color: #111a20;
+            border-color: #111a20;
+        }
+        .btn-outline-primary {
+            color: #1d5532;
+            border-color: #1d5532;
+        }
+        .btn-outline-primary:hover {
+            background-color: #1d5532;
+            border-color: #1d5532;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1d5532;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="header-card p-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h1><i class="fas fa-file-lines me-2"></i> Security Reports Hub</h1>
+                    </div>
+                    <p class="lead mb-0">Access all security analysis reports and insights</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Analysis Form -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="analyze-form">
+                    <h3 class="mb-4">Run Security Analysis</h3>
+                    <form id="analysis-form" action="/run-analysis" method="post">
+                        <div class="mb-3">
+                            <label for="dataset" class="form-label">Select Dataset for Analysis</label>
+                            <select class="form-select" id="dataset" name="dataset" required>
+                                <option value="" selected disabled>Choose dataset...</option>
+                                {% for dataset in datasets %}
+                                <option value="{{ dataset }}">{{ dataset }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary" id="analyze-btn">
+                                <i class="fas fa-play me-2"></i> Run Analysis
+                            </button>
+                        </div>
+                    </form>
+                    <div id="analysis-status" class="mt-4" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="loader me-3" id="analysis-loader"></div>
+                                <div>
+                                    <h5 class="mb-1">Analysis in Progress</h5>
+                                    <p class="mb-2" id="status-message">Processing security data...</p>
+                                    <div class="progress">
+                                        <div id="analysis-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Add reset button for stuck analysis -->
+                        <div class="text-end mt-2">
+                            <button id="reset-analysis-btn" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-sync me-1"></i> Reset Analysis State
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Report Cards -->
+        <div class="row">
+            <!-- Summary Statistics -->
+            <div class="col-md-4 mb-4">
+                <div class="content-card report-card {{ '' if has_stats else 'card-disabled' }}">
+                    <div class="report-card-body">
+                        <div class="text-center">
+                            <div class="report-icon">
+                                <i class="fas fa-chart-pie"></i>
+                            </div>
+                            <h3>Summary Statistics</h3>
+                            <p class="text-muted">
+                                Key metrics and statistics about the analyzed security events, including alerts, drops,
+                                and source IPs.
+                            </p>
+                        </div>
+                        <div class="report-card-footer text-center">
+                            {% if has_stats %}
+                            <a href="{{ url_for('view_summary_statistics') }}" class="btn btn-primary w-100">
+                                <i class="fas fa-eye me-2"></i> View Statistics
+                            </a>
+                            {% else %}
+                            <button class="btn btn-primary w-100" disabled>
+                                <i class="fas fa-exclamation-circle me-2"></i> Not Available
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Key Findings and Recommendations -->
+            <div class="col-md-4 mb-4">
+                <div class="content-card report-card {{ '' if has_report else 'card-disabled' }}">
+                    <div class="report-card-body">
+                        <div class="text-center">
+                            <div class="report-icon">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <h3>Key Findings</h3>
+                            <p class="text-muted">
+                                Important discoveries from the security analysis and actionable recommendations to address threats.
+                            </p>
+                        </div>
+                        <div class="report-card-footer text-center">
+                            {% if has_report %}
+                            <a href="{{ url_for('view_key_findings') }}" class="btn btn-primary w-100">
+                                <i class="fas fa-eye me-2"></i> View Findings
+                            </a>
+                            {% else %}
+                            <button class="btn btn-primary w-100" disabled>
+                                <i class="fas fa-exclamation-circle me-2"></i> Not Available
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Detailed Mitigation Strategies -->
+            <div class="col-md-4 mb-4">
+                <div class="content-card report-card {{ '' if has_report else 'card-disabled' }}">
+                    <div class="report-card-body">
+                        <div class="text-center">
+                            <div class="report-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h3>Mitigation Strategies</h3>
+                            <p class="text-muted">
+                                Comprehensive security strategies to mitigate identified threats, with implementation plans and timelines.
+                            </p>
+                        </div>
+                        <div class="report-card-footer text-center">
+                            {% if has_report %}
+                            <a href="{{ url_for('view_detailed_mitigations') }}" class="btn btn-primary w-100">
+                                <i class="fas fa-eye me-2"></i> View Strategies
+                            </a>
+                            {% else %}
+                            <button class="btn btn-primary w-100" disabled>
+                                <i class="fas fa-exclamation-circle me-2"></i> Not Available
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Additional Options -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <h4 class="mb-4">Additional Views</h4>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('view_full_report') }}" class="btn btn-outline-primary w-100 {{ '' if has_report else 'disabled' }}">
+                                <i class="fas fa-file-alt me-2"></i> View Full Report
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('view_visualizations') }}" class="btn btn-outline-primary w-100 {{ '' if not has_visualizations else '' }}">
+                                <i class="fas fa-chart-bar me-2"></i> View All Visualizations
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('view_strategy') }}" class="btn btn-outline-primary w-100 {{ '' if has_strategy else 'disabled' }}">
+                                <i class="fas fa-list-check me-2"></i> View Raw Mitigation Strategy
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Overview -->
+        {% if statistics %}
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <h4 class="mb-4">Quick Statistics Overview</h4>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Total Events</h5>
+                                    <p class="card-text display-6 fw-bold">{{ statistics.get('total_records', 0) | format_number }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Unique Source IPs</h5>
+                                    <p class="card-text display-6 fw-bold">{{ statistics.get('unique_source_ips', 0) | format_number }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Alert %</h5>
+                                    <p class="card-text display-6 fw-bold">{{ statistics.get('alert_percentage', 0) | round(1) }}%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">High Risk Domains</h5>
+                                    <p class="card-text display-6 fw-bold">{{ statistics.get('high_risk_domains_count', 0) | format_number }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Instructions -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <h4><i class="fas fa-info-circle me-2"></i> How to Use</h4>
+                    <p>
+                        This Security Reports Hub provides access to all security analysis reports and insights.
+                    </p>
+                    <ol>
+                        <li><strong>Run an Analysis</strong> - Start by selecting a dataset and running a security analysis using the form at the top</li>
+                        <li><strong>Summary Statistics</strong> - Essential metrics about security events, alerts, and drops</li>
+                        <li><strong>Key Findings</strong> - Important discoveries from the analysis and recommendations</li>
+                        <li><strong>Mitigation Strategies</strong> - Detailed plans to address the identified threats</li>
+                    </ol>
+                    <p>
+                        Click on any of the cards above to view the specific section of the report. If any section is unavailable,
+                        you need to run a security analysis first.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const analysisForm = document.getElementById('analysis-form');
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const analysisStatus = document.getElementById('analysis-status');
+            const analysisLoader = document.getElementById('analysis-loader');
+            const analysisProgress = document.getElementById('analysis-progress');
+            const statusMessage = document.getElementById('status-message');
+            const resetAnalysisBtn = document.getElementById('reset-analysis-btn');
+
+            // Check if analysis is running on page load
+            checkAnalysisStatus();
+
+            // Set interval to check status every 10 seconds (reduced refresh frequency)
+            setInterval(checkAnalysisStatus, 10000);
+
+            function checkAnalysisStatus() {
+                fetch('/analysis_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.running) {
+                            // Show running status
+                            analysisStatus.style.display = 'block';
+                            analysisLoader.style.display = 'block';
+                            analyzeBtn.disabled = true;
+                            
+                            // Show progress animation
+                            if (analysisProgress.style.width !== '100%') {
+                                simulateProgress();
+                            }
+                        } else {
+                            // Analysis not running
+                            analyzeBtn.disabled = false;
+                            
+                            // Only show status if there was a result
+                            if (data.result) {
+                                if (data.result.error) {
+                                    // Error case - show message but don't refresh
+                                    statusMessage.textContent = "Analysis completed with errors: " + data.result.error;
+                                    analysisStatus.style.display = 'block';
+                                    analysisLoader.style.display = 'none';
+                                } else if (!window.analysisJustCompleted) {
+                                    // Success case - only refresh once when newly completed
+                                    window.analysisJustCompleted = true;
+                                    statusMessage.textContent = "Analysis completed successfully! Refreshing page...";
+                                    analysisProgress.style.width = '100%';
+                                    analysisLoader.style.display = 'none';
+                                    
+                                    // Add a longer delay before refreshing
+                                    setTimeout(function() {
+                                        location.reload();
+                                    }, 3000);
+                                }
+                            } else {
+                                // No result, just hide the status
+                                analysisStatus.style.display = 'none';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error checking analysis status:", error);
+                    });
+            }
+
+            let progressInterval;
+            function simulateProgress() {
+                // Clear any existing interval
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
+                
+                // Start from current progress or 0
+                let progress = parseInt(analysisProgress.style.width) || 0;
+                
+                progressInterval = setInterval(function() {
+                    // Increment slowly approaching but never reaching 100%
+                    if (progress < 90) {
+                        progress += 1;
+                    } else {
+                        progress += 0.1;
+                    }
+                    
+                    // Cap at 99%
+                    progress = Math.min(progress, 99);
+                    
+                    analysisProgress.style.width = progress + '%';
+                    
+                    // Update status message
+                    if (progress < 30) {
+                        statusMessage.textContent = "Processing security data...";
+                    } else if (progress < 60) {
+                        statusMessage.textContent = "Analyzing attack patterns...";
+                    } else if (progress < 90) {
+                        statusMessage.textContent = "Generating visualizations and reports...";
+                    } else {
+                        statusMessage.textContent = "Finalizing results...";
+                    }
+                }, 1000);
+            }
+
+            // Handle form submission - use our custom function to update UI immediately
+            analysisForm.addEventListener('submit', function(e) {
+                // Don't prevent default - let form submit normally to /run-analysis
+                
+                // Show status display
+                analysisStatus.style.display = 'block';
+                analysisLoader.style.display = 'block';
+                analyzeBtn.disabled = true;
+                
+                // Start progress simulation
+                simulateProgress();
+            });
+
+            // Handle reset button click
+            resetAnalysisBtn.addEventListener('click', function() {
+                fetch('/reset_analysis_state', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            statusMessage.textContent = "Analysis state reset. Refreshing page...";
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1500);
+                        } else {
+                            console.error("Failed to reset analysis state:", data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error resetting analysis state:", error);
+                    });
+            });
+        });
+    </script>
+</body>
+</html>

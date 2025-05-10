@@ -14,231 +14,105 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
-            padding: 20px 0;
-            background-color: #f5f7fa;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #111a20;
+            background-color: #cfd1d3;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
         }
-        .header-card {
-            background-color: #1a3263;
-            color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
-        .content-card {
+        .markdown-body {
             background-color: white;
+            padding: 45px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            margin-bottom: 30px;
         }
-        .btn-back {
-            background-color: #2c4b8e;
-            border-color: #2c4b8e;
-            color: white;
-        }
-        .btn-back:hover {
-            background-color: #1a3263;
-            border-color: #1a3263;
-            color: white;
-        }
-        /* Style the rendered markdown content */
-        #markdown-content {
-            line-height: 1.6;
-            color: #333;
-            font-size: 16px;
-        }
-        #markdown-content h1, 
-        #markdown-content h2, 
-        #markdown-content h3, 
-        #markdown-content h4, 
-        #markdown-content h5, 
-        #markdown-content h6 {
+        h1, h2, h3, h4, h5, h6 {
+            color: #1d5532;
             margin-top: 24px;
             margin-bottom: 16px;
             font-weight: 600;
-            line-height: 1.25;
-            color: #2c4b8e;
         }
-        #markdown-content h1 {
+        h1 {
             font-size: 2em;
-            padding-bottom: .3em;
-            border-bottom: 2px solid #eaecef;
-        }
-        #markdown-content h2 {
-            font-size: 1.5em;
-            padding-bottom: .3em;
             border-bottom: 1px solid #eaecef;
-            color: #1a3263;
+            padding-bottom: .3em;
         }
-        #markdown-content h3 {
-            font-weight: 600;
-            color: #2c4b8e;
-            margin-bottom: 16px;
-            border-left: 4px solid #2c4b8e;
-            padding-left: 10px;
+        h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: .3em;
         }
-        #markdown-content p, 
-        #markdown-content blockquote, 
-        #markdown-content ul, 
-        #markdown-content ol, 
-        #markdown-content dl, 
-        #markdown-content table, 
-        #markdown-content pre {
-            margin-top: 0;
-            margin-bottom: 16px;
+        a {
+            color: #1d5532;
+            text-decoration: none;
         }
-        #markdown-content strong {
-            font-weight: 600;
-            color: #1a3263;
+        a:hover {
+            text-decoration: underline;
         }
-        #markdown-content code {
-            padding: .2em .4em;
-            margin: 0;
-            font-size: 85%;
-            background-color: rgba(27,31,35,.05);
-            border-radius: 3px;
+        code {
             font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+            background-color: rgba(29, 85, 50, 0.1);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 85%;
         }
-        #markdown-content pre {
+        pre {
+            background-color: #111a20;
+            border-radius: 8px;
             padding: 16px;
             overflow: auto;
-            font-size: 85%;
-            line-height: 1.45;
-            background-color: #f6f8fa;
-            border-radius: 6px;
-            border: 1px solid #e1e4e8;
-            margin-bottom: 20px;
         }
-        #markdown-content pre code {
-            padding: 0;
+        pre code {
             background-color: transparent;
+            color: #cfd1d3;
+            padding: 0;
         }
-        #markdown-content ul,
-        #markdown-content ol {
-            padding-left: 2em;
+        blockquote {
+            border-left: 4px solid #1d5532;
+            margin-left: 0;
+            padding-left: 16px;
+            color: #111a20;
         }
-        #markdown-content ul li,
-        #markdown-content ol li {
-            margin-bottom: 6px;
-        }
-        /* Enhanced table styling */
-        #markdown-content table {
-            border-spacing: 0;
+        table {
             border-collapse: collapse;
             width: 100%;
-            margin: 25px 0;
-            overflow-x: auto;
-            display: block;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            border-radius: 6px;
+            margin: 16px 0;
         }
-        #markdown-content table th {
-            padding: 12px 14px;
-            text-align: left;
-            font-weight: 600;
-            background-color: #2c4b8e;
+        table th {
+            background-color: #1d5532;
             color: white;
-            border: 1px solid #1a3263;
-            font-size: 0.95rem;
+            font-weight: 600;
+            padding: 8px;
+            text-align: left;
         }
-        #markdown-content table td {
-            padding: 12px 14px;
-            border: 1px solid #dfe2e5;
-            font-size: 0.95rem;
-            vertical-align: top;
+        table td {
+            border: 1px solid #cfd1d3;
+            padding: 8px;
         }
-        #markdown-content table tr {
-            background-color: white;
-            transition: background-color 0.2s ease;
-        }
-        #markdown-content table tr:nth-child(2n) {
+        table tr:nth-child(even) {
             background-color: #f8f9fa;
         }
-        #markdown-content table tr:hover {
-            background-color: #f1f5fb;
+        img {
+            max-width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 4px;
         }
-        /* Make tables responsive */
-        @media (max-width: 767px) {
-            #markdown-content table {
-                max-width: 100%;
-                font-size: 0.85rem;
-            }
-            #markdown-content table th, 
-            #markdown-content table td {
-                padding: 8px 10px;
-            }
-        }
-        #markdown-content blockquote {
-            padding: 0 1em;
-            color: #6a737d;
-            border-left: 4px solid #2c4b8e;
-            background-color: #f8f9fa;
-            padding: 10px 15px;
-            border-radius: 0 5px 5px 0;
-        }
-        #markdown-content hr {
-            height: 2px;
-            background-color: #e1e4e8;
+        hr {
+            height: 1px;
+            background-color: #eaecef;
             border: none;
             margin: 24px 0;
         }
-        /* Special callout boxes */
-        .alert-info, .alert-warning, .alert-danger, .alert-success {
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        .alert-info {
-            color: #0c5460;
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-        }
-        .alert-warning {
-            color: #856404;
-            background-color: #fff3cd;
-            border: 1px solid #ffeeba;
-        }
-        .alert-danger {
-            color: #721c24;
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-        }
-        .alert-success {
-            color: #155724;
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
+        ul, ol {
+            padding-left: 2em;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="header-card p-4">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h1><i class="fas fa-shield-alt me-2"></i> Mitigation Strategy</h1>
-                        <a href="/" class="btn btn-back">
-                            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
-                        </a>
-                    </div>
-                    <p class="lead mb-0">AI-generated security recommendations and mitigation plans</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Report Content -->
-        <div class="row">
-            <div class="col-md-12">
-                <div class="content-card">
-                    <!-- Display the HTML content with enhanced styling -->
-                    <div id="markdown-content">
-                        {{ content | safe }}
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="markdown-body">
+        {{ content | safe }}
     </div>
 
     <!-- JavaScript Libraries -->
@@ -247,7 +121,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Add special styling to important sections
-            const markdownContent = document.getElementById('markdown-content');
+            const markdownContent = document.querySelector('.markdown-body');
             
             // Look for headers and enhance them
             const headers = markdownContent.querySelectorAll('h2');

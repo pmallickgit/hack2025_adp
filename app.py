@@ -93,7 +93,7 @@ def run_analysis():
         dataset = request.form.get('dataset')
         if not dataset:
             # Default to samples_5000.csv
-            dataset = 'samples_5000.csv'
+            dataset = 'dense_security_logs.csv'
         
         # Full path to dataset
         dataset_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'datasets', dataset)

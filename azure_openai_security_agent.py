@@ -32,7 +32,7 @@ from azure_wrapper import init_azure_openai
 
 # Set custom color palette using the specified colors
 PRIMARY_COLOR = "#1d5532"  # dark green
-SECONDARY_COLOR = "#111a20"  # very dark blue/black
+SECONDARY_COLOR = "#111a20"  # dark
 custom_palette = [PRIMARY_COLOR, SECONDARY_COLOR]
 
 # Set visualization style with custom colors
@@ -82,6 +82,40 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return super(NumpyEncoder, self).default(obj)
 
+def extract_tld(domain):
+    """
+    Extract top-level domain (TLD) from a domain string.
+    
+    Args:
+        domain (str): A domain name string
+        
+    Returns:
+        str: The top-level domain (e.g., 'com', 'net', 'org', etc.)
+    """
+    if not domain or not isinstance(domain, str):
+        return ''
+    
+    # Clean up the domain string
+    domain = domain.strip().lower()
+    
+    # Filter out non-domain values
+    if domain == '' or domain == 'unknown' or domain == 'nan':
+        return ''
+    
+    try:
+        # Split by dots and get the last part
+        parts = domain.split('.')
+        # Return the last part if there are at least 2 parts
+        if len(parts) >= 2:
+            tld = parts[-1]
+            # Simple validation - TLD should be at least 2 chars
+            if len(tld) >= 2:
+                return tld
+    except Exception as e:
+        print(f"Error extracting TLD from domain '{domain}': {e}")
+    
+    return ''
+
 class AzureOpenAISecurityAgent:
     """
     Security Agent that leverages Azure OpenAI and machine learning to analyze
@@ -130,196 +164,243 @@ class AzureOpenAISecurityAgent:
     def load_data(self):
         """
         Load and parse the attack log CSV file.
+        Support both custom log format and standard CSV files.
         """
         print("\nLoading attack log data...")
         
         try:
-            # Read raw lines from the file
+            # Check if the file exists
+            if not os.path.exists(self.log_file):
+                print(f"Error: Log file {self.log_file} does not exist")
+                return None
+
+            # First try standard CSV format
+            # try:
+            #     print("Attempting to load as standard CSV...")
+            #     self.raw_df = pd.read_csv(self.log_file)
+            #     if len(self.raw_df) > 0:
+            #         print(f"Successfully loaded {len(self.raw_df)} records as standard CSV")
+            #         return self.raw_df
+            # except Exception as e:
+            #     print(f"Standard CSV parsing failed: {e}")
+            
+            # If standard CSV fails, try custom format
+            # print("Trying custom log format...")
+            
+            # Read the entire file
             with open(self.log_file, 'r') as f:
                 lines = f.readlines()
             
             # Initialize data structures
-            timestamps = []
-            current_timestamp = None
             entries = []
+            current_timestamp = {
+                'epoch': int(time.time()),
+                'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
             
-            # Skip the header line
-            header_line = lines[0].strip()
+            # Check for header
+            if lines and "SRC_IP" in lines[0] and "SID" in lines[0]:
+                # Skip header line
+                lines = lines[1:]
             
             # Process each line
-            for line in lines[1:]:
+            for line in lines:
                 line = line.strip()
                 
+                if not line or line.startswith("#"):
+                    continue
+                    
                 if line.startswith("TIME "):
                     # Parse timestamp line
-                    parts = line.split(" ", 2)
+                    parts = line.split(" ", 3)
                     if len(parts) >= 3:
                         epoch_time = int(parts[1])
-                        datetime_str = parts[2].split(" ")[0]
+                        datetime_str = parts[2] + (" " + parts[3] if len(parts) > 3 else "")
                         current_timestamp = {
                             'epoch': epoch_time,
                             'datetime': datetime_str
                         }
-                else:
+                elif " " in line:
                     # Parse data entry line
                     try:
-                        parts = line.split("  ")
+                        parts = line.split()
                         if len(parts) >= 7:
-                            sid = int(parts[0])
+                            sid = int(parts[0]) if parts[0].isdigit() else 0
                             src_ip = parts[1]
-                            src_port = int(parts[2])
+                            src_port = int(parts[2]) if parts[2].isdigit() else 0
                             dest_ip = parts[3]
-                            dest_port = int(parts[4])
+                            dest_port = int(parts[4]) if parts[4].isdigit() else 0
                             action = parts[5]
-                            hit_count = int(parts[6])
+                            hit_count = int(parts[6]) if parts[6].isdigit() else 0
                             domain = parts[7] if len(parts) > 7 else ""
                             
                             # Add the entry with current timestamp
-                            if current_timestamp:
-                                entry = {
-                                    'timestamp': current_timestamp['epoch'],
-                                    'datetime': current_timestamp['datetime'],
-                                    'sid': sid,
-                                    'src_ip': src_ip,
-                                    'src_port': src_port,
-                                    'dest_ip': dest_ip,
-                                    'dest_port': dest_port,
-                                    'action': action,
-                                    'hit_count': hit_count,
-                                    'domain': domain
-                                }
-                                entries.append(entry)
+                            entry = {
+                                'timestamp': current_timestamp['epoch'],
+                                'datetime': current_timestamp['datetime'],
+                                'sid': sid,
+                                'src_ip': src_ip,
+                                'src_port': src_port,
+                                'dest_ip': dest_ip,
+                                'dest_port': dest_port,
+                                'action': action,
+                                'hit_count': hit_count,
+                                'domain': domain
+                            }
+                            entries.append(entry)
                     except Exception as e:
-                        # Skip malformed lines
+                        print(f"Skipping malformed line: {line[:50]}... ({str(e)})")
                         continue
+
+            # Create DataFrame from entries
+            if entries:
+                self.raw_df = pd.DataFrame(entries)
+                print(f"Successfully loaded {len(self.raw_df)} records using custom parser")
+                return self.raw_df
             
-            # Create DataFrame
-            self.raw_df = pd.DataFrame(entries)
+            # If both methods failed, try space-delimited format
+            print("Trying space-delimited format...")
+            try:
+                self.raw_df = pd.read_csv(
+                    self.log_file, 
+                    sep=r'\s+', 
+                    engine='python',
+                    comment='#',
+                    header=None,
+                    names=['sid', 'src_ip', 'src_port', 'dest_ip', 'dest_port', 'action', 'hit_count', 'domain'],
+                    skiprows=1, 
+                    on_bad_lines='skip'
+                )
+                # Add timestamp columns
+                self.raw_df['timestamp'] = int(time.time())
+                self.raw_df['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Filter out TIME rows that might have been parsed as data
+                self.raw_df = self.raw_df[~self.raw_df['src_ip'].str.contains('TIME', na=False)]
+                
+                print(f"Successfully loaded {len(self.raw_df)} records with space-delimited parser")
+                return self.raw_df
+            except Exception as e:
+                print(f"Space-delimited parsing failed: {e}")
+            
+            # If all parsing methods failed, log the error
+            if self.raw_df is None or len(self.raw_df) == 0:
+                print("All parsing methods failed. Creating empty DataFrame.")
+                self.raw_df = pd.DataFrame(columns=['timestamp', 'datetime', 'sid', 'src_ip', 
+                                                'src_port', 'dest_ip', 'dest_port', 
+                                                'action', 'hit_count', 'domain'])
+            
+            # Ensure required columns exist
+            required_columns = ['timestamp', 'datetime', 'src_ip', 'dest_ip', 'action']
+            for col in required_columns:
+                if col not in self.raw_df.columns:
+                    self.raw_df[col] = None
+                    print(f"Warning: Column '{col}' was not found and has been added with null values")
             
             # Print summary statistics
             print(f"Data loaded successfully:")
             print(f"  - Total records: {len(self.raw_df)}")
-            print(f"  - Time range: {self.raw_df['datetime'].min()} to {self.raw_df['datetime'].max()}")
-            print(f"  - Unique SIDs: {self.raw_df['sid'].nunique()}")
-            print(f"  - Actions: {dict(self.raw_df['action'].value_counts())}")
             
             return self.raw_df
             
         except Exception as e:
             print(f"Error loading data: {e}")
-            raise
+            import traceback
+            traceback.print_exc()
+            
+            # If all else fails, create a minimal DataFrame
+            print("Creating empty DataFrame after parsing failure")
+            self.raw_df = pd.DataFrame(columns=['timestamp', 'datetime', 'sid', 'src_ip', 
+                                            'src_port', 'dest_ip', 'dest_port', 
+                                            'action', 'hit_count', 'domain'])
+            return self.raw_df
     
     def extract_features(self):
-        """
-        Extract and engineer features from the raw data.
-        """
-        if self.raw_df is None:
-            self.load_data()
-            
-        print("\nExtracting and engineering features...")
-        df = self.raw_df.copy()
+        """Extract relevant features from the raw log data for analysis."""
+        print("\nExtracting features from log data...")
         
-        # 1. IP-based features
-        print("  - Creating network-based features...")
+        # Create a copy of the raw DataFrame to avoid modifying the original
+        df = self.raw_df.copy() if self.raw_df is not None else pd.DataFrame()
         
-        # Extract IP address components
-        def get_ip_class(ip):
-            """Determine IP address class (A, B, C, D, or E)"""
-            first_octet = int(ip.split('.')[0])
-            if 1 <= first_octet <= 126:
-                return 'A'
-            elif 128 <= first_octet <= 191:
-                return 'B'
-            elif 192 <= first_octet <= 223:
-                return 'C'
-            elif 224 <= first_octet <= 239:
-                return 'D'
-            else:
-                return 'E'
+        # Check if the DataFrame has records before continuing
+        if df.empty:
+            print("Warning: The dataset is empty. Cannot extract features from empty dataset.")
+            # Create a minimal DataFrame with required columns to allow the pipeline to continue
+            df = pd.DataFrame({
+                'timestamp': [int(time.time())],
+                'datetime': [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+                'src_ip': ['0.0.0.0'],
+                'dest_ip': ['0.0.0.0'],
+                'src_port': [0],
+                'dest_port': [0],
+                'action': ['unknown'],
+                'sid': [0],
+                'domain': [''],
+                'hit_count': [0]
+            })
+            print("Created a placeholder record to allow further processing.")
+        else:
+            print(f"Processing {len(df)} log entries for feature extraction")
+        
+        # Ensure all required columns exist (silently add missing columns)
+        required_columns = ['timestamp', 'datetime', 'src_ip', 'dest_ip', 'action', 'sid', 'domain', 'hit_count']
+        for col in required_columns:
+            if col not in df.columns:
+                if col in ['timestamp', 'hit_count', 'sid', 'src_port', 'dest_port']:
+                    df[col] = 0
+                else:
+                    df[col] = ''
+        
+        # Convert timestamp to datetime if needed
+        if 'datetime' not in df.columns and 'timestamp' in df.columns:
+            try:
+                df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+                df['datetime'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                print("Added datetime column from timestamp")
+            except:
+                df['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print("Failed to convert timestamp to datetime, using current time")
                 
-        # Extract network information
-        df['src_network'] = df['src_ip'].apply(lambda ip: '.'.join(ip.split('.')[:2]))
-        df['dest_network'] = df['dest_ip'].apply(lambda ip: '.'.join(ip.split('.')[:2]))
-        df['src_ip_class'] = df['src_ip'].apply(get_ip_class)
-        df['dest_ip_class'] = df['dest_ip'].apply(get_ip_class)
+        # Convert string columns to strings (in case they're loaded as other types)
+        for col in ['src_ip', 'dest_ip', 'action', 'domain']:
+            if col in df.columns:
+                df[col] = df[col].astype(str)
         
-        # 2. Domain-based features
-        print("  - Creating domain-based features...")
+        # Convert numeric columns to integers with error handling
+        for col in ['hit_count', 'sid', 'src_port', 'dest_port']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
         
-        # Extract domain TLD and check for suspicious patterns
-        df['domain_tld'] = df['domain'].apply(lambda d: d.split('.')[-1] if d and '.' in d else '')
-        
-        # Function to calculate domain risk score based on suspicious keywords
-        suspicious_patterns = [
-            'malware', 'trojan', 'hack', 'exploit', 'attack', 'phish', 'virus',
-            'botnet', 'ransom', 'spyware', 'threat', 'c2', 'command', 'control',
-            'worm', 'dark', 'shadow', 'covert', 'hidden', 'leak', 'steal'
-        ]
-        
-        def calculate_domain_risk(domain):
-            if not domain:
-                return 0
+        # Additional feature extraction
+        try:
+            # Extract TLD from domain
+            if 'domain' in df.columns:
+                df['domain_tld'] = df['domain'].apply(lambda x: extract_tld(x) if isinstance(x, str) and x else '')
+            
+            # Parse datetime into components if it exists
+            if 'datetime' in df.columns:
+                df['parsed_datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+                df['date'] = df['parsed_datetime'].dt.date
+                df['hour'] = df['parsed_datetime'].dt.hour
+                df['day_of_week'] = df['parsed_datetime'].dt.day_name()
                 
-            domain = domain.lower()
-            score = 0
-            
-            # Check for suspicious keywords
-            for pattern in suspicious_patterns:
-                if pattern in domain:
-                    score += 1
-            
-            # Check for numeric patterns (often used in algorithmically generated domains)
-            digit_count = sum(c.isdigit() for c in domain)
-            if digit_count > 3:
-                score += 1
-            
-            # Check for long domains (potential obfuscation)
-            if len(domain) > 20:
-                score += 1
+                # Drop temporary column
+                df = df.drop('parsed_datetime', axis=1)
+        
+            # Calculate source network (first 3 octets of IP)
+            if 'src_ip' in df.columns:
+                df['src_network'] = df['src_ip'].apply(lambda x: '.'.join(str(x).split('.')[:3]) + '.0/24' 
+                                                     if isinstance(x, str) and x != 'nan' else 'unknown')
                 
-            return score
+            print(f"Feature extraction completed successfully. Final feature count: {len(df.columns)}")
             
-        df['domain_risk_score'] = df['domain'].apply(calculate_domain_risk)
+        except Exception as e:
+            print(f"Error during feature extraction: {e}")
+            import traceback
+            traceback.print_exc()
         
-        # 3. Temporal features
-        print("  - Creating temporal features...")
-        
-        # Convert timestamp to datetime and extract components
-        df['hour_of_day'] = pd.to_datetime(df['datetime']).dt.hour
-        df['day_of_week'] = pd.to_datetime(df['datetime']).dt.dayofweek
-        df['is_weekend'] = df['day_of_week'].apply(lambda day: 1 if day >= 5 else 0)  # 5,6 = Saturday,Sunday
-        
-        # 4. SID-based features
-        print("  - Creating SID-based features...")
-        
-        # Group SIDs by prefix
-        df['sid_category'] = df['sid'].astype(str).str[:3]
-        
-        # 5. Port-based features
-        print("  - Creating port-based features...")
-        
-        # Categorize ports
-        def categorize_port(port):
-            """Categorize ports into well-known, registered, or dynamic"""
-            if port <= 1023:
-                return 'well-known'
-            elif 1024 <= port <= 49151:
-                return 'registered'
-            else:
-                return 'dynamic'
-                
-        df['src_port_category'] = df['src_port'].apply(categorize_port)
-        df['dest_port_category'] = df['dest_port'].apply(categorize_port)
-        
-        # Store processed data
-        self.processed_df = df
-        
-        # Print feature summary
-        new_features = list(set(self.processed_df.columns) - set(self.raw_df.columns))
-        print(f"Feature engineering complete. New features created: {len(new_features)}")
-        print(f"  - {', '.join(sorted(new_features))}")
-        
-        return self.processed_df
+        self.df = df
+        return df
         
     def generate_action_distribution(self):
         """Generate visualization for action distribution."""
@@ -343,3 +424,173 @@ class AzureOpenAISecurityAgent:
             f.write(explanation)
             
         return "security_insights/visualizations/01_action_distribution.png"
+    
+    def generate_top_source_ips(self):
+        """Generate visualization for top source IP addresses."""
+        plt.figure(figsize=(10, 6))
+        top_ips = self.processed_df.groupby('src_ip')['hit_count'].sum().sort_values(ascending=False).head(10)
+        ax = top_ips.plot(kind='barh', color=PRIMARY_COLOR)
+        apply_consistent_styling(ax, title='Top 10 Source IP Addresses by Hit Count', xlabel='Hit Count', ylabel='Source IP')
+        
+        plt.tight_layout()
+        
+        # Save both visualization and explanation
+        os.makedirs('security_insights/visualizations', exist_ok=True)
+        plt.savefig('security_insights/visualizations/02_top_source_ips.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Create explanation file
+        explanation = "This chart shows the top 10 source IP addresses with the highest hit counts in the security events. "
+        explanation += "These IP addresses may represent potential threat actors or compromised systems attempting to "
+        explanation += "access your resources repeatedly and should be investigated further."
+        
+        with open('security_insights/visualizations/02_top_source_ips_explanation.txt', 'w') as f:
+            f.write(explanation)
+            
+        return "security_insights/visualizations/02_top_source_ips.png"
+    
+    async def run_full_analysis(self):
+        """
+        Run the complete security analysis pipeline.
+        
+        This method orchestrates all analysis steps:
+        1. Data loading and preprocessing
+        2. Feature extraction
+        3. Visualization generation
+        4. Insights extraction
+        5. Report generation
+        
+        Returns:
+            dict: Analysis results summary
+        """
+        start_time = time.time()
+        results = {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "log_file": self.log_file,
+            "output_dir": self.output_dir
+        }
+        
+        try:
+            # Step 1: Load and process data
+            print("\n=== Step 1: Loading and Processing Data ===")
+            self.load_data()
+            
+            # Step 2: Extract features
+            print("\n=== Step 2: Extracting Features ===")
+            self.processed_df = self.extract_features()
+            
+            # Step 3: Generate visualizations
+            print("\n=== Step 3: Generating Visualizations ===")
+            self.generate_action_distribution()
+            self.generate_top_source_ips()
+            
+            # Generate summary statistics
+            print("\n=== Step 4: Generating Summary Statistics ===")
+            stats = self.generate_summary_statistics()
+            results["summary_statistics"] = stats
+            
+            # Add analysis time
+            elapsed_time = time.time() - start_time
+            results["analysis_time_seconds"] = elapsed_time
+            print(f"\nAnalysis completed in {elapsed_time:.2f} seconds")
+            
+            return results
+            
+        except Exception as e:
+            print(f"Error during analysis: {e}")
+            import traceback
+            traceback.print_exc()
+            results["status"] = "error"
+            results["error"] = str(e)
+            return results
+    
+    def generate_summary_statistics(self):
+        """
+        Generate summary statistics from processed data.
+        Returns a dictionary of statistics.
+        """
+        if self.processed_df is None:
+            print("No processed data available. Run extract_features() first.")
+            return {}
+        
+        df = self.processed_df.copy()
+        total_records = len(df)
+        if 'action' not in df.columns:
+            df['action'] = 'unknown'
+        
+        # Basic statistics
+        alert_count = len(df[df['action'].str.lower() == 'alert'])
+        drop_count = len(df[df['action'].str.lower() == 'drop'])
+        
+        # Calculate percentages
+        alert_percentage = (alert_count / total_records * 100) if total_records > 0 else 0
+        drop_percentage = (drop_count / total_records * 100) if total_records > 0 else 0
+        
+        # Get unique counts
+        unique_source_ips = df['src_ip'].nunique()
+        unique_destination_ips = df['dest_ip'].nunique()
+        
+        # Extract domains if they exist
+        if 'domain' not in df.columns:
+            df['domain'] = ''
+        
+        # Ensure domain_tld column exists and is populated
+        if 'domain_tld' not in df.columns:
+            # Extract TLD from domain for each row
+            df['domain_tld'] = df['domain'].apply(extract_tld)
+        
+        # Ensure domain_risk_score column exists
+        if 'domain_risk_score' not in df.columns:
+            df['domain_risk_score'] = 0
+        
+        unique_domains = df[df['domain'] != '']['domain'].nunique()
+        
+        stats = {
+            "total_records": total_records,
+            "alert_count": alert_count,
+            "drop_count": drop_count,
+            "alert_percentage": alert_percentage,
+            "drop_percentage": drop_percentage,
+            "unique_source_ips": unique_source_ips,
+            "unique_destination_ips": unique_destination_ips,
+            "unique_domains": unique_domains,
+            "avg_hit_count": df['hit_count'].mean(),
+            "high_risk_domains_count": sum(df['domain_risk_score'] > 1)
+        }
+        
+        # Get top hit sources
+        top_hit_source_ips = df.groupby('src_ip')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
+        top_hit_sids = df.groupby('sid')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
+        top_hit_domains = df[df['domain'] != ''].groupby('domain')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
+        
+        # Network statistics
+        # Check if required columns exist for network statistics
+        if 'src_network' not in df.columns:
+            df['src_network'] = 'unknown'
+        if 'dest_network' not in df.columns:
+            df['dest_network'] = 'unknown'
+        
+        top_source_networks = df.groupby('src_network')['hit_count'].sum().sort_values(ascending=False).head(5).to_dict()
+        top_destination_networks = df.groupby('dest_network')['hit_count'].sum().sort_values(ascending=False).head(5).to_dict()
+        
+        # Create top domain TLDs dictionary - only include non-empty TLDs
+        top_domain_tlds = df[df['domain_tld'] != ''].groupby('domain_tld')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
+        
+        # Add to stats dictionary
+        stats.update({
+            "top_hit_source_ips": top_hit_source_ips,
+            "top_hit_sids": top_hit_sids,
+            "top_hit_domains": top_hit_domains,
+            "top_source_networks": top_source_networks,
+            "top_destination_networks": top_destination_networks,
+            "top_domain_tlds": top_domain_tlds
+        })
+        
+        # Save to JSON file
+        stats_file = os.path.join(self.output_dir, "summary_statistics.json")
+        with open(stats_file, "w") as f:
+            json.dump(stats, f, cls=NumpyEncoder)
+        
+        print(f"Summary statistics saved to {stats_file}")
+        return stats

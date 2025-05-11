@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Time Series Analysis - Azure OpenAI Security Agent</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #111a20;
+            background-color: #cfd1d3;
+            padding: 20px;
+        }
+        .header-card {
+            background-color: #1d5532;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .content-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .btn-back {
+            background-color: #1d5532;
+            border-color: #1d5532;
+            color: white;
+        }
+        .btn-back:hover {
+            background-color: #174628;
+            border-color: #174628;
+            color: white;
+        }
+        .explanation-card {
+            background-color: #f8f9fa;
+            border-left: 5px solid #1d5532;
+            border-radius: 0 5px 5px 0;
+            padding: 20px;
+            margin: 30px 0;
+        }
+        .ip-badge {
+            font-size: 1rem;
+            background-color: #1d5532;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            margin-left: 10px;
+        }
+        .viz-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .viz-container img {
+            max-width: 100%;
+            border-radius: 5px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="header-card p-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h1>
+                            <i class="fas fa-chart-line me-2"></i> 
+                            IP Time Series Analysis
+                            <span class="ip-badge">{{ ip_address }}</span>
+                        </h1>
+                        <div>
+                            <a href="{{ url_for('query_interface') }}" class="btn btn-back me-2">
+                                <i class="fas fa-robot me-2"></i> Back to Query
+                            </a>
+                            <a href="{{ url_for('index') }}" class="btn btn-back">
+                                <i class="fas fa-home me-2"></i> Dashboard
+                            </a>
+                        </div>
+                    </div>
+                    <p class="lead mb-0">Time-series analysis of security events for a specific IP address</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <h2>Time Series Analysis for IP {{ ip_address }}</h2>
+                    
+                    <div class="viz-container">
+                        <img src="{{ visualization_url }}" alt="Time Series Graph for IP {{ ip_address }}" class="img-fluid">
+                    </div>
+                    
+                    <div class="explanation-card">
+                        <h4><i class="fas fa-info-circle me-2"></i> Analysis</h4>
+                        <div class="explanation-content">
+                            {{ explanation | replace('\n', '<br>') | safe }}
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h4>Investigation Recommendations</h4>
+                        <ul class="list-group">
+                            <li class="list-group-item">
+                                <i class="fas fa-search me-2 text-primary"></i>
+                                Investigate peak activity times to identify attack patterns
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-sync-alt me-2 text-primary"></i>
+                                Compare alert and drop patterns to evaluate security rule effectiveness
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-shield-alt me-2 text-primary"></i>
+                                Consider implementing IP-specific blocking rules if consistently seeing high drop rates
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-exclamation-triangle me-2 text-primary"></i>
+                                Review false positives if alert counts are significantly higher than drop counts
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="content-card">
+                    <h4 class="mb-3">Additional Actions</h4>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('query_interface') }}" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-robot me-2"></i> Ask AI Assistant
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('view_visualizations') }}" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-chart-bar me-2"></i> All Visualizations
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('view_summary_statistics') }}" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-chart-pie me-2"></i> Summary Statistics
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

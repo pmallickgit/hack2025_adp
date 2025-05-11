@@ -216,11 +216,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for network, count in statistics.get('top_source_networks').items() %}
+                                    {% for network, count_data in statistics.get('top_source_networks').items() %}
                                         <tr>
                                             <td>{{ network }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('total_records', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('total_records', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
@@ -246,11 +260,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for network, count in statistics.get('top_destination_networks').items() %}
+                                    {% for network, count_data in statistics.get('top_destination_networks').items() %}
                                         <tr>
                                             <td>{{ network }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('total_records', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('total_records', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
@@ -276,11 +304,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for tld, count in statistics.get('top_domain_tlds').items() %}
+                                    {% for tld, count_data in statistics.get('top_domain_tlds').items() %}
                                         <tr>
                                             <td>{{ tld if tld else '(empty)' }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('unique_domains', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('unique_domains', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
@@ -306,11 +348,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for domain, count in statistics.get('top_hit_domains', {}).items() %}
+                                    {% for domain, count_data in statistics.get('top_hit_domains', {}).items() %}
                                         <tr>
                                             <td>{{ domain if domain else '(empty)' }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('total_records', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('total_records', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
@@ -336,11 +392,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for sid, count in statistics.get('top_hit_sids', {}).items() %}
+                                    {% for sid, count_data in statistics.get('top_hit_sids', {}).items() %}
                                         <tr>
                                             <td>{{ sid }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('total_records', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('total_records', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
@@ -366,11 +436,25 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    {% for ip, count in statistics.get('top_hit_source_ips', {}).items() %}
+                                    {% for ip, count_data in statistics.get('top_hit_source_ips', {}).items() %}
                                         <tr>
                                             <td>{{ ip }}</td>
-                                            <td>{{ count | format_number }}</td>
-                                            <td>{{ (count / statistics.get('total_records', 1) * 100) | round(2) }}%</td>
+                                            <td>
+                                                {% if count_data is mapping and 'count' in count_data %}
+                                                    {{ count_data.count | format_number }}
+                                                {% else %}
+                                                    {{ count_data | format_number }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if count_data is mapping and 'percentage' in count_data %}
+                                                    {{ (count_data.percentage * 100) | round(2) }}%
+                                                {% elif count_data is mapping %}
+                                                    N/A
+                                                {% else %}
+                                                    {{ (count_data / statistics.get('total_records', 1) * 100) | round(2) }}%
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>

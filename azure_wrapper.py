@@ -5,7 +5,7 @@ from openai import AsyncAzureOpenAI
 from agents import set_default_openai_client, set_default_openai_api, set_tracing_disabled
 from dotenv import load_dotenv
 
-def init_azure_openai(api_version="2023-12-01-preview", default_deployment="gpt-4"):
+def init_azure_openai(api_version="2025-01-01-preview", default_deployment="gpt-4.1-mini"):
     """
     Initializes and returns an Azure OpenAI client.
     Also sets it as default client for the OpenAI Agents SDK.

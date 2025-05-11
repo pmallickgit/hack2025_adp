@@ -174,19 +174,6 @@ class AzureOpenAISecurityAgent:
                 print(f"Error: Log file {self.log_file} does not exist")
                 return None
 
-            # First try standard CSV format
-            # try:
-            #     print("Attempting to load as standard CSV...")
-            #     self.raw_df = pd.read_csv(self.log_file)
-            #     if len(self.raw_df) > 0:
-            #         print(f"Successfully loaded {len(self.raw_df)} records as standard CSV")
-            #         return self.raw_df
-            # except Exception as e:
-            #     print(f"Standard CSV parsing failed: {e}")
-            
-            # If standard CSV fails, try custom format
-            # print("Trying custom log format...")
-            
             # Read the entire file
             with open(self.log_file, 'r') as f:
                 lines = f.readlines()
@@ -257,31 +244,6 @@ class AzureOpenAISecurityAgent:
                 self.raw_df = pd.DataFrame(entries)
                 print(f"Successfully loaded {len(self.raw_df)} records using custom parser")
                 return self.raw_df
-            
-            # If both methods failed, try space-delimited format
-            print("Trying space-delimited format...")
-            try:
-                self.raw_df = pd.read_csv(
-                    self.log_file, 
-                    sep=r'\s+', 
-                    engine='python',
-                    comment='#',
-                    header=None,
-                    names=['sid', 'src_ip', 'src_port', 'dest_ip', 'dest_port', 'action', 'hit_count', 'domain'],
-                    skiprows=1, 
-                    on_bad_lines='skip'
-                )
-                # Add timestamp columns
-                self.raw_df['timestamp'] = int(time.time())
-                self.raw_df['datetime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
-                # Filter out TIME rows that might have been parsed as data
-                self.raw_df = self.raw_df[~self.raw_df['src_ip'].str.contains('TIME', na=False)]
-                
-                print(f"Successfully loaded {len(self.raw_df)} records with space-delimited parser")
-                return self.raw_df
-            except Exception as e:
-                print(f"Space-delimited parsing failed: {e}")
             
             # If all parsing methods failed, log the error
             if self.raw_df is None or len(self.raw_df) == 0:
@@ -401,196 +363,480 @@ class AzureOpenAISecurityAgent:
         
         self.df = df
         return df
-        
-    def generate_action_distribution(self):
-        """Generate visualization for action distribution."""
-        plt.figure(figsize=(10, 6))
-        action_counts = self.processed_df['action'].value_counts()
-        ax = action_counts.plot(kind='barh', color=PRIMARY_COLOR)
-        apply_consistent_styling(ax, title='Distribution of Actions in Security Events', xlabel='Count', ylabel='Action Type')
-        
-        plt.tight_layout()
-        
-        # Save both visualization and explanation
-        os.makedirs('security_insights/visualizations', exist_ok=True)
-        plt.savefig('security_insights/visualizations/01_action_distribution.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Create explanation file
-        explanation = "This chart shows the distribution of different actions observed in the security events. "
-        explanation += "The most common actions may indicate patterns of attack or system behavior worth investigating further."
-        
-        with open('security_insights/visualizations/01_action_distribution_explanation.txt', 'w') as f:
-            f.write(explanation)
-            
-        return "security_insights/visualizations/01_action_distribution.png"
     
-    def generate_top_source_ips(self):
-        """Generate visualization for top source IP addresses."""
-        plt.figure(figsize=(10, 6))
-        top_ips = self.processed_df.groupby('src_ip')['hit_count'].sum().sort_values(ascending=False).head(10)
-        ax = top_ips.plot(kind='barh', color=PRIMARY_COLOR)
-        apply_consistent_styling(ax, title='Top 10 Source IP Addresses by Hit Count', xlabel='Hit Count', ylabel='Source IP')
+    async def ask_natural_language_query(self, query, data_context=None):
+        """
+        Ask a natural language question about the security data using Azure OpenAI.
         
-        plt.tight_layout()
+        Args:
+            query (str): The natural language query about the security data
+            data_context (str, optional): Additional context to include with the query
         
-        # Save both visualization and explanation
-        os.makedirs('security_insights/visualizations', exist_ok=True)
-        plt.savefig('security_insights/visualizations/02_top_source_ips.png', dpi=300, bbox_inches='tight')
-        plt.close()
+        Returns:
+            dict: A dictionary containing the response and any relevant data
+        """
+        print(f"Processing natural language query: {query}")
         
-        # Create explanation file
-        explanation = "This chart shows the top 10 source IP addresses with the highest hit counts in the security events. "
-        explanation += "These IP addresses may represent potential threat actors or compromised systems attempting to "
-        explanation += "access your resources repeatedly and should be investigated further."
+        if not self.has_openai or not self.openai_client:
+            return {
+                "status": "error",
+                "error": "Azure OpenAI client not available. Please configure your Azure OpenAI credentials.",
+                "response": "Unable to process query: Azure OpenAI not configured."
+            }
         
-        with open('security_insights/visualizations/02_top_source_ips_explanation.txt', 'w') as f:
-            f.write(explanation)
+        try:
+            # Build context from our data
+            context = "Security log analysis data:\n"
             
-        return "security_insights/visualizations/02_top_source_ips.png"
+            # Add statistics if available
+            stats_path = os.path.join(self.output_dir, 'summary_statistics.json')
+            if os.path.exists(stats_path):
+                with open(stats_path, 'r') as f:
+                    stats_data = json.load(f)
+                    context += f"STATISTICS: {json.dumps(stats_data, indent=2)}\n\n"
+            
+            # Add data sample from our dataframe
+            if self.raw_df is not None and len(self.raw_df) > 0:
+                # Add dataframe info
+                context += f"DATASET INFO:\n"
+                context += f"- Total records: {len(self.raw_df)}\n"
+                context += f"- Columns: {', '.join(self.raw_df.columns)}\n"
+                
+                # Add sample data (first few rows)
+                context += f"\nDATA SAMPLE (first 5 rows):\n"
+                context += self.raw_df.head(5).to_string() + "\n\n"
+                
+                # Add key aggregate metrics
+                context += f"KEY METRICS:\n"
+                
+                # Count by action type
+                if 'action' in self.raw_df.columns:
+                    action_counts = self.raw_df['action'].value_counts().to_dict()
+                    context += f"- Actions breakdown: {action_counts}\n"
+                
+                # Top source IPs
+                if 'src_ip' in self.raw_df.columns:
+                    top_ips = self.raw_df['src_ip'].value_counts().head(5).to_dict()
+                    context += f"- Top source IPs: {top_ips}\n"
+                
+                # Top SIDs if available
+                if 'sid' in self.raw_df.columns:
+                    top_sids = self.raw_df['sid'].value_counts().head(5).to_dict()
+                    context += f"- Top security IDs (SIDs): {top_sids}\n"
+            
+            # Add user-provided context if available
+            if data_context:
+                context += f"\nUSER-PROVIDED CONTEXT:\n{data_context}\n"
+            
+            # Prepare system message for the OpenAI API
+            system_message = """You are an expert cybersecurity analyst specializing in threat detection 
+and analysis. You're assisting with analyzing security log data. Provide concise, 
+accurate answers based on the provided data. If the query cannot be answered with 
+the given data, clearly state that and suggest what additional information would 
+be needed."""
+            
+            # Prepare the user message with query and context
+            user_message = f"Based on the following security data, please answer this question:\n\nQUESTION: {query}\n\nCONTEXT:\n{context}\n\nPlease provide a clear, concise answer using only the data provided. If the data is insufficient to answer the question completely, state so and suggest what additional data would be helpful."
+            
+            # Call OpenAI API to process the query
+            response = await self.openai_client.chat.completions.create(
+                model=self.openai_deployment,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.5,
+                max_tokens=1000
+            )
+            
+            # Extract the response content
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                answer = response.choices[0].message.content
+                return {
+                    "status": "success",
+                    "response": answer,
+                    "query": query
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": "Received empty response from Azure OpenAI",
+                    "query": query,
+                    "response": "Unable to process query: No response received."
+                }
+                
+        except Exception as e:
+            print(f"Error processing natural language query: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            return {
+                "status": "error",
+                "error": str(e),
+                "query": query,
+                "response": f"Error processing query: {str(e)}"
+            }
+    
+    async def generate_openai_analysis(self):
+        """
+        Generate a comprehensive security analysis using Azure OpenAI.
+        
+        This method analyzes the security logs using Azure OpenAI to identify:
+        - Attack patterns and trends
+        - Potential threat actors
+        - Vulnerability exploits
+        - Recommended security measures
+        
+        Returns:
+            str: Path to the generated analysis file
+        """
+        print("\nGenerating AI-powered security analysis...")
+        
+        if not self.has_openai or not self.openai_client:
+            print("Azure OpenAI is not available. Skipping AI security analysis.")
+            return None
+        
+        try:
+            # Prepare the output file path
+            output_file = os.path.join(self.output_dir, "openai_analysis.md")
+            
+            # Build context from our data
+            context = "## Security Log Analysis Context\n\n"
+            
+            # Add dataset information
+            if self.raw_df is not None and len(self.raw_df) > 0:
+                context += f"### Dataset Statistics\n"
+                context += f"- Total log entries: {len(self.raw_df)}\n"
+                context += f"- Time period: {self.raw_df['datetime'].min()} to {self.raw_df['datetime'].max()}\n"
+                
+                # Add action breakdown
+                if 'action' in self.raw_df.columns:
+                    action_counts = self.raw_df['action'].value_counts()
+                    context += f"\n### Action Types\n"
+                    for action, count in action_counts.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- {action}: {count} ({percentage:.1f}%)\n"
+                
+                # Add top source IPs
+                if 'src_ip' in self.raw_df.columns:
+                    top_ips = self.raw_df['src_ip'].value_counts().head(10)
+                    context += f"\n### Top Source IPs\n"
+                    for ip, count in top_ips.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- {ip}: {count} attacks ({percentage:.1f}%)\n"
+                
+                # Add top security IDs if available
+                if 'sid' in self.raw_df.columns:
+                    top_sids = self.raw_df['sid'].value_counts().head(10)
+                    context += f"\n### Top Security IDs (SIDs)\n"
+                    for sid, count in top_sids.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- SID {sid}: {count} occurrences ({percentage:.1f}%)\n"
+                        
+                # Add domain information if available
+                if 'domain' in self.raw_df.columns and self.raw_df['domain'].notna().sum() > 0:
+                    top_domains = self.raw_df['domain'].value_counts().head(10)
+                    context += f"\n### Top Domains\n"
+                    for domain, count in top_domains.items():
+                        if domain and domain != 'nan' and domain != '':
+                            percentage = (count / len(self.raw_df)) * 100
+                            context += f"- {domain}: {count} occurrences ({percentage:.1f}%)\n"
+                
+                # Add time-based patterns
+                if 'hour' in self.df.columns:
+                    hour_counts = self.df['hour'].value_counts().sort_index()
+                    peak_hour = hour_counts.idxmax()
+                    context += f"\n### Temporal Patterns\n"
+                    context += f"- Peak activity hour: {peak_hour}:00 ({hour_counts[peak_hour]} events)\n"
+                    
+                    if 'day_of_week' in self.df.columns:
+                        dow_counts = self.df['day_of_week'].value_counts()
+                        peak_day = dow_counts.idxmax()
+                        context += f"- Most active day: {peak_day} ({dow_counts[peak_day]} events)\n"
+            
+            # Prepare system message for the OpenAI API
+            system_message = """You are an expert cybersecurity analyst with deep knowledge of network 
+security, threat intelligence, and attack patterns. Your task is to analyze security log data 
+and provide comprehensive insights and actionable recommendations.
+
+Your analysis should include:
+1. Executive summary of key findings
+2. Identified attack patterns and techniques
+3. Assessment of the threat actors (based on tactics and targeting)
+4. Most critical security concerns
+5. Detailed technical analysis of significant threats
+6. Recommended security measures
+
+Format your response in Markdown with appropriate sections and bullet points.
+"""
+            
+            # Prepare the user message with the security log context
+            user_message = f"""Please analyze the following security log data and provide a comprehensive 
+security assessment:
+
+{context}
+
+Based on this data, generate a thorough security analysis report identifying attack patterns, 
+potential threat actors, vulnerability exploits, and recommended security measures.
+
+Structure your analysis with clear section headings in Markdown format.
+"""
+            
+            # Call OpenAI API to generate the analysis
+            print("Calling Azure OpenAI for comprehensive security analysis...")
+            response = await self.openai_client.chat.completions.create(
+                model=self.openai_deployment,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=2500
+            )
+            
+            # Extract the analysis from the response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                analysis = response.choices[0].message.content
+                
+                # Prepend a title and timestamp
+                full_analysis = f"# AI-Generated Security Analysis\n\n"
+                full_analysis += f"**Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                full_analysis += f"**Dataset:** {os.path.basename(self.log_file)}\n\n"
+                full_analysis += analysis
+                
+                # Save the analysis to a markdown file
+                with open(output_file, 'w') as f:
+                    f.write(full_analysis)
+                
+                print(f"Security analysis generated and saved to {output_file}")
+                return output_file
+            else:
+                print("Failed to generate security analysis: Empty response from Azure OpenAI")
+                return None
+                
+        except Exception as e:
+            print(f"Error generating AI security analysis: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    async def generate_mitigation_strategy(self):
+        """
+        Generate a mitigation strategy using Azure OpenAI based on the security analysis.
+        
+        This method creates specific, actionable recommendations to address the identified
+        security threats and vulnerabilities in the analyzed security logs.
+        
+        Returns:
+            str: Path to the generated mitigation strategy file
+        """
+        print("\nGenerating AI-powered mitigation strategies...")
+        
+        if not self.has_openai or not self.openai_client:
+            print("Azure OpenAI is not available. Skipping mitigation strategy generation.")
+            return None
+        
+        try:
+            # Prepare the output file path
+            output_file = os.path.join(self.output_dir, "mitigation_strategy.md")
+            
+            # First, check if we have existing analysis to reference
+            openai_analysis_path = os.path.join(self.output_dir, "openai_analysis.md")
+            existing_analysis = ""
+            if os.path.exists(openai_analysis_path):
+                with open(openai_analysis_path, 'r') as f:
+                    existing_analysis = f.read()
+            
+            # Build context from our data
+            context = "## Security Log Analysis Context\n\n"
+            
+            # Add dataset information
+            if self.raw_df is not None and len(self.raw_df) > 0:
+                context += f"### Dataset Statistics\n"
+                context += f"- Total log entries: {len(self.raw_df)}\n"
+                
+                # Add action breakdown
+                if 'action' in self.raw_df.columns:
+                    action_counts = self.raw_df['action'].value_counts()
+                    context += f"\n### Security Actions\n"
+                    for action, count in action_counts.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- {action}: {count} ({percentage:.1f}%)\n"
+                
+                # Add top source IPs
+                if 'src_ip' in self.raw_df.columns:
+                    top_ips = self.raw_df['src_ip'].value_counts().head(5)
+                    context += f"\n### Top Threat Sources\n"
+                    for ip, count in top_ips.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- {ip}: {count} events ({percentage:.1f}%)\n"
+                
+                # Add top security IDs and their meaning if available
+                if 'sid' in self.raw_df.columns:
+                    top_sids = self.raw_df['sid'].value_counts().head(5)
+                    context += f"\n### Top Alert Types (SIDs)\n"
+                    for sid, count in top_sids.items():
+                        percentage = (count / len(self.raw_df)) * 100
+                        context += f"- SID {sid}: {count} occurrences ({percentage:.1f}%)\n"
+            
+            # Prepare system message for the OpenAI API
+            system_message = """You are an expert cybersecurity consultant specializing in security 
+architecture, incident response, and threat mitigation. Your task is to develop a 
+comprehensive mitigation strategy based on security log analysis.
+
+Your mitigation strategy should include:
+1. Executive summary of recommended actions
+2. Immediate mitigation steps (prioritized by urgency)
+3. Medium-term security enhancements
+4. Long-term security architecture improvements
+5. Specific technical recommendations (rules, configurations, tools)
+6. Security awareness and training recommendations
+7. Monitoring and detection strategy improvements
+
+Format your response in Markdown with appropriate sections and bullet points. 
+Be specific and actionable in your recommendations."""
+            
+            # Prepare the user message with the security context and existing analysis
+            user_message = """Based on the following security analysis, please provide a 
+comprehensive mitigation strategy:
+
+"""
+
+            # Add the context and existing analysis to the user message
+            user_message += f"{context}\n\n"
+            
+            if existing_analysis:
+                user_message += "## Previous Security Analysis\n\n" + existing_analysis + "\n\n"
+            
+            user_message += """Generate a detailed, practical mitigation strategy addressing all identified security 
+concerns with specific, actionable recommendations. Include both immediate tactical 
+steps and strategic security improvements.
+
+Structure your recommendations with clear section headings in Markdown format.
+"""
+            
+            # Call OpenAI API to generate the mitigation strategy
+            print("Calling Azure OpenAI for security mitigation strategy...")
+            response = await self.openai_client.chat.completions.create(
+                model=self.openai_deployment,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=2500
+            )
+            
+            # Extract the strategy from the response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                strategy = response.choices[0].message.content
+                
+                # Prepend a title and timestamp
+                full_strategy = f"# Security Mitigation Strategy\n\n"
+                full_strategy += f"**Generated on:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                full_strategy += f"**Dataset:** {os.path.basename(self.log_file)}\n\n"
+                full_strategy += strategy
+                
+                # Save the strategy to a markdown file
+                with open(output_file, 'w') as f:
+                    f.write(full_strategy)
+                
+                print(f"Mitigation strategy generated and saved to {output_file}")
+                return output_file
+            else:
+                print("Failed to generate mitigation strategy: Empty response from Azure OpenAI")
+                return None
+                
+        except Exception as e:
+            print(f"Error generating mitigation strategy: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def run_full_analysis(self):
         """
         Run the complete security analysis pipeline.
         
-        This method orchestrates all analysis steps:
+        This method coordinates all analysis steps:
         1. Data loading and preprocessing
         2. Feature extraction
-        3. Visualization generation
-        4. Insights extraction
-        5. Report generation
+        3. Summary statistics generation
+        4. Visualization creation
+        5. OpenAI-powered insights
+        6. Mitigation strategy generation
         
         Returns:
-            dict: Analysis results summary
+            dict: A summary of analysis results including paths to generated files
         """
-        start_time = time.time()
+        print("\n=== Starting Full Security Log Analysis ===")
         results = {
-            "status": "success",
-            "timestamp": datetime.now().isoformat(),
-            "log_file": self.log_file,
-            "output_dir": self.output_dir
+            "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "files_generated": []
         }
         
         try:
-            # Step 1: Load and process data
-            print("\n=== Step 1: Loading and Processing Data ===")
+            # Step 1: Load and preprocess data
+            print("\nStep 1: Loading and preprocessing data...")
             self.load_data()
             
             # Step 2: Extract features
-            print("\n=== Step 2: Extracting Features ===")
-            self.processed_df = self.extract_features()
+            print("\nStep 2: Extracting features...")
+            self.extract_features()
             
-            # Step 3: Generate visualizations
-            print("\n=== Step 3: Generating Visualizations ===")
-            self.generate_action_distribution()
-            self.generate_top_source_ips()
+            # Step 3: Generate summary statistics
+            # print("\nStep 3: Generating summary statistics...")
+            # stats_file = self.generate_summary_statistics()
+            # if stats_file:
+            #     results["files_generated"].append(stats_file)
+                
+            # Step 4: Create visualizations
+            # print("\nStep 4: Creating visualizations...")
+            # viz_files = self.create_all_visualizations()
+            # if viz_files:
+            #     results["files_generated"].extend(viz_files)
+                
+            # Step 5: Generate OpenAI analysis if available
+            if self.openai_client:
+                print("\nStep 5: Generating OpenAI analysis...")
+                analysis_file = await self.generate_openai_analysis()
+                if analysis_file:
+                    results["files_generated"].append(analysis_file)
+            else:
+                print("\nStep 5: Skipping OpenAI analysis (client not available)")
+                
+            # Step 6: Generate mitigation strategy
+            print("\nStep 6: Generating mitigation strategy...")
+            strategy_file = await self.generate_mitigation_strategy()
+            if strategy_file:
+                results["files_generated"].append(strategy_file)
+                
+            # Record completion time
+            results["end_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results["status"] = "completed"
             
-            # Generate summary statistics
-            print("\n=== Step 4: Generating Summary Statistics ===")
-            stats = self.generate_summary_statistics()
-            results["summary_statistics"] = stats
-            
-            # Add analysis time
-            elapsed_time = time.time() - start_time
-            results["analysis_time_seconds"] = elapsed_time
-            print(f"\nAnalysis completed in {elapsed_time:.2f} seconds")
+            # Save results summary
+            summary_path = os.path.join(self.output_dir, "analysis_summary.json")
+            with open(summary_path, 'w') as f:
+                json.dump(results, f, indent=2, cls=NumpyEncoder)
+                
+            print(f"\n=== Analysis completed successfully ===")
+            print(f"Generated {len(results['files_generated'])} output files")
             
             return results
             
         except Exception as e:
-            print(f"Error during analysis: {e}")
+            print(f"\nError during full analysis: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Record error information
             results["status"] = "error"
             results["error"] = str(e)
+            results["end_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Save results even if there was an error
+            summary_path = os.path.join(self.output_dir, "analysis_summary.json")
+            with open(summary_path, 'w') as f:
+                json.dump(results, f, indent=2)
+                
             return results
-    
-    def generate_summary_statistics(self):
-        """
-        Generate summary statistics from processed data.
-        Returns a dictionary of statistics.
-        """
-        if self.processed_df is None:
-            print("No processed data available. Run extract_features() first.")
-            return {}
-        
-        df = self.processed_df.copy()
-        total_records = len(df)
-        if 'action' not in df.columns:
-            df['action'] = 'unknown'
-        
-        # Basic statistics
-        alert_count = len(df[df['action'].str.lower() == 'alert'])
-        drop_count = len(df[df['action'].str.lower() == 'drop'])
-        
-        # Calculate percentages
-        alert_percentage = (alert_count / total_records * 100) if total_records > 0 else 0
-        drop_percentage = (drop_count / total_records * 100) if total_records > 0 else 0
-        
-        # Get unique counts
-        unique_source_ips = df['src_ip'].nunique()
-        unique_destination_ips = df['dest_ip'].nunique()
-        
-        # Extract domains if they exist
-        if 'domain' not in df.columns:
-            df['domain'] = ''
-        
-        # Ensure domain_tld column exists and is populated
-        if 'domain_tld' not in df.columns:
-            # Extract TLD from domain for each row
-            df['domain_tld'] = df['domain'].apply(extract_tld)
-        
-        # Ensure domain_risk_score column exists
-        if 'domain_risk_score' not in df.columns:
-            df['domain_risk_score'] = 0
-        
-        unique_domains = df[df['domain'] != '']['domain'].nunique()
-        
-        stats = {
-            "total_records": total_records,
-            "alert_count": alert_count,
-            "drop_count": drop_count,
-            "alert_percentage": alert_percentage,
-            "drop_percentage": drop_percentage,
-            "unique_source_ips": unique_source_ips,
-            "unique_destination_ips": unique_destination_ips,
-            "unique_domains": unique_domains,
-            "avg_hit_count": df['hit_count'].mean(),
-            "high_risk_domains_count": sum(df['domain_risk_score'] > 1)
-        }
-        
-        # Get top hit sources
-        top_hit_source_ips = df.groupby('src_ip')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
-        top_hit_sids = df.groupby('sid')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
-        top_hit_domains = df[df['domain'] != ''].groupby('domain')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
-        
-        # Network statistics
-        # Check if required columns exist for network statistics
-        if 'src_network' not in df.columns:
-            df['src_network'] = 'unknown'
-        if 'dest_network' not in df.columns:
-            df['dest_network'] = 'unknown'
-        
-        top_source_networks = df.groupby('src_network')['hit_count'].sum().sort_values(ascending=False).head(5).to_dict()
-        top_destination_networks = df.groupby('dest_network')['hit_count'].sum().sort_values(ascending=False).head(5).to_dict()
-        
-        # Create top domain TLDs dictionary - only include non-empty TLDs
-        top_domain_tlds = df[df['domain_tld'] != ''].groupby('domain_tld')['hit_count'].sum().sort_values(ascending=False).head(10).to_dict()
-        
-        # Add to stats dictionary
-        stats.update({
-            "top_hit_source_ips": top_hit_source_ips,
-            "top_hit_sids": top_hit_sids,
-            "top_hit_domains": top_hit_domains,
-            "top_source_networks": top_source_networks,
-            "top_destination_networks": top_destination_networks,
-            "top_domain_tlds": top_domain_tlds
-        })
-        
-        # Save to JSON file
-        stats_file = os.path.join(self.output_dir, "summary_statistics.json")
-        with open(stats_file, "w") as f:
-            json.dump(stats, f, cls=NumpyEncoder)
-        
-        print(f"Summary statistics saved to {stats_file}")
-        return stats

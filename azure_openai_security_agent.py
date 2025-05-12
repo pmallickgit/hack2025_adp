@@ -364,6 +364,158 @@ class AzureOpenAISecurityAgent:
         self.df = df
         return df
     
+    def generate_summary_statistics(self):
+        """
+        Generate comprehensive summary statistics from the security log data.
+        
+        This includes:
+        - Total records
+        - Unique IP addresses and domains
+        - Action statistics (alert, drop percentages)
+        - Top source IPs, domains, SIDs 
+        - Top 5 domains with maximum number of drops
+        
+        Returns:
+            str: Path to the generated summary statistics JSON file
+        """
+        print("Generating summary statistics...")
+        
+        try:
+            # Ensure we have processed data
+            if self.df is None or self.df.empty:
+                print("No data available for generating statistics")
+                return None
+            
+            # Initialize the statistics dictionary
+            stats = {}
+            
+            # Basic count statistics
+            stats["total_records"] = len(self.df)
+            
+            # Calculate unique elements
+            if 'src_ip' in self.df.columns:
+                stats["unique_source_ips"] = self.df["src_ip"].nunique()
+            else:
+                stats["unique_source_ips"] = 0
+                
+            if 'dest_ip' in self.df.columns:
+                stats["unique_destination_ips"] = self.df["dest_ip"].nunique()
+            else:
+                stats["unique_destination_ips"] = 0
+                
+            if 'domain' in self.df.columns:
+                stats["unique_domains"] = self.df["domain"].nunique()
+            else:
+                stats["unique_domains"] = 0
+            
+            # Calculate action percentages
+            if 'action' in self.df.columns:
+                # Convert action column to lowercase for case-insensitive comparison
+                self.df['action_lower'] = self.df['action'].str.lower()
+                action_counts_lower = self.df['action_lower'].value_counts(normalize=True) * 100
+                action_counts = self.df['action'].value_counts(normalize=True) * 100
+                
+                # Alert percentage - check for any case variation of "alert"
+                alert_percentage = 0
+                for action in action_counts.index:
+                    if 'alert' in action.lower():
+                        alert_percentage += action_counts[action]
+                stats["alert_percentage"] = alert_percentage
+                
+                # Drop percentage - check for any case variation of "drop"
+                drop_percentage = 0
+                for action in action_counts.index:
+                    if 'drop' in action.lower():
+                        drop_percentage += action_counts[action]
+                stats["drop_percentage"] = drop_percentage
+                
+                # Clean up temporary column
+                self.df.drop('action_lower', axis=1, inplace=True)
+            else:
+                stats["alert_percentage"] = 0
+                stats["drop_percentage"] = 0
+            
+            # Calculate average hit count
+            if 'hit_count' in self.df.columns:
+                stats["avg_hit_count"] = self.df['hit_count'].mean()
+            else:
+                stats["avg_hit_count"] = 0
+            
+            # Count high risk domains (domains with multiple drops)
+            if 'domain' in self.df.columns and 'action' in self.df.columns:
+                # Get domains with DROP actions
+                if 'DROP' in self.df['action'].values:
+                    drop_filter = self.df['action'] == 'DROP'
+                else:
+                    drop_filter = self.df['action'].str.lower() == 'drop'
+                
+                drop_domains = self.df[drop_filter]['domain'].value_counts()
+                # Count domains with more than one drop
+                stats["high_risk_domains_count"] = (drop_domains > 1).sum()
+                
+                # Top 5 domains with maximum drops 
+                stats["top_drop_domains"] = drop_domains.head(5).to_dict()
+            else:
+                stats["high_risk_domains_count"] = 0
+                stats["top_drop_domains"] = {}
+            
+            # Get top source IPs with drops
+            if 'src_ip' in self.df.columns and 'action' in self.df.columns:
+                if 'DROP' in self.df['action'].values:
+                    drop_filter = self.df['action'] == 'DROP'
+                else:
+                    drop_filter = self.df['action'].str.lower() == 'drop'
+                
+                stats["top_drop_source_ips"] = self.df[drop_filter]['src_ip'].value_counts().head(5).to_dict()
+            else:
+                stats["top_drop_source_ips"] = {}
+            
+            # Get top SIDs with drops
+            if 'sid' in self.df.columns and 'action' in self.df.columns:
+                if 'DROP' in self.df['action'].values:
+                    drop_filter = self.df['action'] == 'DROP'
+                else:
+                    drop_filter = self.df['action'].str.lower() == 'drop'
+                
+                stats["top_drop_sids"] = self.df[drop_filter]['sid'].value_counts().head(5).to_dict()
+            else:
+                stats["top_drop_sids"] = {}
+            
+            # Network-based statistics
+            if 'src_network' in self.df.columns:
+                stats["top_source_networks"] = self.df['src_network'].value_counts().head(5).to_dict()
+            else:
+                stats["top_source_networks"] = {}
+                
+            if 'dest_ip' in self.df.columns:
+                # Extract destination network
+                self.df['dest_network'] = self.df['dest_ip'].apply(
+                    lambda x: '.'.join(str(x).split('.')[:3]) + '.0/24' 
+                    if isinstance(x, str) and x != 'nan' else 'unknown')
+                stats["top_destination_networks"] = self.df['dest_network'].value_counts().head(5).to_dict()
+            else:
+                stats["top_destination_networks"] = {}
+            
+            # TLD-based statistics
+            if 'domain_tld' in self.df.columns:
+                stats["top_domain_tlds"] = self.df['domain_tld'].value_counts().head(5).to_dict()
+            else:
+                stats["top_domain_tlds"] = {}
+            
+            # Save the statistics to a JSON file
+            output_file = os.path.join(self.output_dir, "summary_statistics.json")
+            with open(output_file, 'w') as f:
+                json.dump(stats, f, indent=2, cls=NumpyEncoder)
+            
+            print(f"Summary statistics generated and saved to {output_file}")
+            return output_file
+            
+        except Exception as e:
+            print(f"Error generating summary statistics: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
     async def ask_natural_language_query(self, query, data_context=None):
         """
         Ask a natural language question about the security data using Azure OpenAI.
@@ -423,6 +575,27 @@ class AzureOpenAISecurityAgent:
                 if 'sid' in self.raw_df.columns:
                     top_sids = self.raw_df['sid'].value_counts().head(5).to_dict()
                     context += f"- Top security IDs (SIDs): {top_sids}\n"
+                
+                # NEW: Add analysis of drops by source IP if query is about drops
+                if 'action' in self.raw_df.columns and 'src_ip' in self.raw_df.columns and ('drop' in query.lower() or 'drops' in query.lower()):
+                    try:
+                        # Filter for drop actions
+                        drops_df = self.raw_df[self.raw_df['action'].str.lower() == 'drop']
+                        if len(drops_df) > 0:
+                            # Count drops by source IP
+                            drops_by_ip = drops_df['src_ip'].value_counts().head(10).to_dict()
+                            context += f"\nDROP ANALYSIS:\n"
+                            context += f"- Total drop actions: {len(drops_df)}\n"
+                            context += f"- Top source IPs with most drops: {drops_by_ip}\n"
+                            
+                            # Add drop percentage info
+                            for ip, count in list(drops_by_ip.items())[:5]:  # Limit to top 5
+                                percentage = (count / len(drops_df)) * 100
+                                context += f"  * {ip}: {count} drops ({percentage:.1f}% of all drops)\n"
+                        else:
+                            context += f"\nDROP ANALYSIS: No 'drop' actions found in the dataset.\n"
+                    except Exception as e:
+                        context += f"\nError analyzing drops by source IP: {e}\n"
             
             # Add user-provided context if available
             if data_context:
@@ -784,10 +957,10 @@ Structure your recommendations with clear section headings in Markdown format.
             self.extract_features()
             
             # Step 3: Generate summary statistics
-            # print("\nStep 3: Generating summary statistics...")
-            # stats_file = self.generate_summary_statistics()
-            # if stats_file:
-            #     results["files_generated"].append(stats_file)
+            print("\nStep 3: Generating summary statistics...")
+            stats_file = self.generate_summary_statistics()
+            if stats_file:
+                results["files_generated"].append(stats_file)
                 
             # Step 4: Create visualizations
             # print("\nStep 4: Creating visualizations...")
